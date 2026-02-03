@@ -1,0 +1,46 @@
+{
+  "name": "lens-exec",
+  "version": "1.0.0",
+  "description": "AR Code Analysis System - Scan physical code with AI-powered feedback",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.160.0",
+    "tesseract.js": "^5.0.4",
+    "opencv.js": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.6",
+    "@types/three": "^0.160.0",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "fast-check": "^3.15.1",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10"
+  },
+  "keywords": [
+    "ar",
+    "augmented-reality",
+    "webxr",
+    "code-analysis",
+    "computer-vision",
+    "ocr",
+    "llm",
+    "typescript"
+  ],
+  "author": "LENS-EXEC Team",
+  "license": "MIT"
+}
