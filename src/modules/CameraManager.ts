@@ -67,23 +67,53 @@ export class CameraManager extends EventEmitter {
     try {
       this.logger.info('Requesting camera access...');
       
-      // Check for HTTPS requirement
-      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      // Check for HTTPS requirement (allow localhost and local network IPs)
+      const isLocalNetwork = location.hostname === 'localhost' || 
+                            location.hostname.startsWith('192.168.') || 
+                            location.hostname.startsWith('10.') || 
+                            location.hostname.startsWith('172.');
+      
+      if (location.protocol !== 'https:' && !isLocalNetwork) {
         throw new Error('HTTPS is required for camera access');
       }
       
-      // Request camera access
+      // Request camera access with mobile browser fallbacks
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: this.config.width },
-          height: { ideal: this.config.height },
+          width: { ideal: this.config.width, min: 1280 }, // Ensure minimum quality
+          height: { ideal: this.config.height, min: 720 },
           frameRate: { ideal: this.config.frameRate },
           facingMode: this.config.facingMode,
+          // Additional constraints for better code reading
+          focusMode: 'continuous' as any,
+          exposureMode: 'continuous' as any,
+          whiteBalanceMode: 'continuous' as any,
         },
         audio: false,
       };
       
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Try modern API first, then fallback to older APIs for mobile compatibility
+      let stream: MediaStream;
+      
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } else {
+        // Fallback for older mobile browsers
+        const getUserMedia = navigator.getUserMedia || 
+                           (navigator as any).webkitGetUserMedia || 
+                           (navigator as any).mozGetUserMedia || 
+                           (navigator as any).msGetUserMedia;
+        
+        if (!getUserMedia) {
+          throw new Error('Camera access not supported in this browser');
+        }
+        
+        stream = await new Promise<MediaStream>((resolve, reject) => {
+          getUserMedia.call(navigator, constraints, resolve, reject);
+        });
+      }
+      
+      this.stream = stream;
       
       if (!this.videoElement) {
         throw new Error('Video element not initialized');

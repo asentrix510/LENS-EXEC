@@ -12,14 +12,14 @@ import type { SystemConfig } from '@/types';
 export function getConfig(): SystemConfig {
   return {
     camera: {
-      width: parseInt(import.meta.env.VITE_CAMERA_WIDTH || '1280'),
-      height: parseInt(import.meta.env.VITE_CAMERA_HEIGHT || '720'),
+      width: parseInt(import.meta.env.VITE_CAMERA_WIDTH || '1920'), // High resolution for mobile cameras
+      height: parseInt(import.meta.env.VITE_CAMERA_HEIGHT || '1080'),
       frameRate: parseInt(import.meta.env.VITE_CAMERA_FRAME_RATE || '30'),
-      facingMode: (import.meta.env.VITE_CAMERA_FACING_MODE as 'user' | 'environment') || 'environment',
+      facingMode: (import.meta.env.VITE_CAMERA_FACING_MODE as 'user' | 'environment') || 'environment', // Use rear camera for mobile
     },
     llm: {
       apiKey: import.meta.env.VITE_LLM_API_KEY || '',
-      model: import.meta.env.VITE_LLM_MODEL || 'gemini-1.5-pro',
+      model: import.meta.env.VITE_LLM_MODEL || 'gemini-2.5-flash',
       maxTokens: parseInt(import.meta.env.VITE_LLM_MAX_TOKENS || '2048'),
       temperature: parseFloat(import.meta.env.VITE_LLM_TEMPERATURE || '0.1'),
       timeout: parseInt(import.meta.env.VITE_LLM_TIMEOUT || '30000'),
@@ -69,12 +69,13 @@ export function validateConfig(config: SystemConfig): string[] {
  */
 export function getSupportedModels(): Record<string, string> {
   return {
-    'gpt-4-vision-preview': 'OpenAI GPT-4 Vision (Recommended)',
+    'gemini-2.5-flash': 'Google Gemini 2.5 Flash (Recommended)',
+    'gemini-2.5-flash-preview-09-2025': 'Google Gemini 2.5 Flash Preview',
+    'gemini-3-flash-preview': 'Google Gemini 3 Flash Preview (Latest)',
+    'gpt-4-vision-preview': 'OpenAI GPT-4 Vision',
     'gpt-4o': 'OpenAI GPT-4 Omni',
     'claude-3-5-sonnet-20241022': 'Anthropic Claude 3.5 Sonnet',
     'claude-3-opus-20240229': 'Anthropic Claude 3 Opus',
-    'gemini-1.5-pro': 'Google Gemini 1.5 Pro',
-    'gemini-1.5-flash': 'Google Gemini 1.5 Flash',
   };
 }
 

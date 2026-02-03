@@ -42,9 +42,10 @@ export class LLMIntegration extends EventEmitter {
     // Validate configuration
     if (!this.config.apiKey) {
       this.logger.warn('No API key provided - LLM analysis will be disabled');
+      return;
     }
     
-    this.logger.info('LLM Integration initialized');
+    this.logger.info(`LLM Integration initialized with model: ${this.config.model}`);
   }
 
   /**
@@ -333,7 +334,7 @@ Please respond in the following JSON format:
   }
 
   /**
-   * Call Google Gemini API
+   * Call Google Gemini API using the official format
    */
   private async callGoogleAPI(prompt: string, imageBlob?: Blob): Promise<any> {
     const parts: any[] = [
@@ -355,32 +356,68 @@ Please respond in the following JSON format:
     return this.networkMonitor.createRetryableRequest(
       `google-${Date.now()}`,
       async () => {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`, {
+        // Use the correct API endpoint format from Google AI docs
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent`;
+        
+        this.logger.debug('Making Gemini API request:', {
+          model: this.config.model,
+          hasApiKey: !!this.config.apiKey,
+          apiKeyLength: this.config.apiKey?.length || 0,
+          url: apiUrl
+        });
+
+        const requestBody = {
+          contents: [
+            {
+              parts: parts
+            }
+          ],
+          generationConfig: {
+            temperature: this.config.temperature,
+            maxOutputTokens: this.config.maxTokens,
+          }
+        };
+
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-goog-api-key': this.config.apiKey, // Use x-goog-api-key header instead of query param
           },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts
-              }
-            ],
-            generationConfig: {
-              temperature: this.config.temperature,
-              maxOutputTokens: this.config.maxTokens,
-            }
-          }),
+          body: JSON.stringify(requestBody),
           signal: this.abortController?.signal,
         });
 
         if (!response.ok) {
           const errorText = await response.text();
+          this.logger.error('Gemini API error response:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorText
+          });
           throw new Error(`Google API error: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
-        return data.candidates[0].content.parts[0].text;
+        this.logger.debug('Gemini API response received:', {
+          hasCandidates: !!data.candidates,
+          candidatesLength: data.candidates?.length || 0,
+          fullResponse: data
+        });
+        
+        if (!data.candidates || data.candidates.length === 0) {
+          this.logger.error('No candidates in Gemini response:', data);
+          throw new Error('No response from Gemini API - check your API key and quota');
+        }
+
+        // Extract text from the response structure
+        const candidate = data.candidates[0];
+        if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+          this.logger.error('Invalid response structure from Gemini:', candidate);
+          throw new Error('Invalid response structure from Gemini API');
+        }
+
+        return candidate.content.parts[0].text;
       },
       3 // Max retries
     );
@@ -391,14 +428,24 @@ Please respond in the following JSON format:
    */
   parseAnalysisResponse(response: string, codeRegionId: string): AnalysisResult {
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from the response - handle multiple formats
+      let jsonText = response;
       
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+      // Remove markdown code blocks if present
+      const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
       }
-
-      const parsed = JSON.parse(jsonMatch[0].replace(/```json\n?|\n?```/g, ''));
+      
+      // Try to find JSON object in the text
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+      }
+      
+      this.logger.debug('Extracted JSON text:', jsonText);
+      
+      const parsed = JSON.parse(jsonText);
 
       // Convert to our AnalysisResult format
       const analysisResult: AnalysisResult = {
@@ -418,23 +465,63 @@ Please respond in the following JSON format:
         };
       }
 
+      this.logger.info('Successfully parsed analysis response:', analysisResult);
       return analysisResult;
 
     } catch (error) {
       this.logger.error('Error parsing LLM response:', error);
+      this.logger.debug('Raw response that failed to parse:', response);
       
-      // Return a basic analysis result with the raw response
+      // Try to extract useful information even if JSON parsing fails
+      const language = this.extractLanguageFromText(response);
+      const suggestions = this.extractSuggestionsFromText(response);
+      
       return {
         codeRegionId,
-        language: 'unknown',
+        language: language || 'unknown',
         errors: [],
-        suggestions: [{
+        suggestions: suggestions.length > 0 ? suggestions : [{
           type: 'improvement',
-          description: `Analysis completed but response format was unexpected. Raw response: ${response.substring(0, 200)}...`,
+          description: `Analysis completed. ${response.substring(0, 200)}${response.length > 200 ? '...' : ''}`,
         }],
         analysisTimestamp: Date.now(),
       };
     }
+  }
+
+  /**
+   * Extract language from text response as fallback
+   */
+  private extractLanguageFromText(text: string): string | null {
+    const languageMatch = text.match(/"language":\s*"([^"]+)"/i);
+    return languageMatch ? languageMatch[1] : null;
+  }
+
+  /**
+   * Extract suggestions from text response as fallback
+   */
+  private extractSuggestionsFromText(text: string): CodeSuggestion[] {
+    const suggestions: CodeSuggestion[] = [];
+    
+    // Look for common suggestion patterns
+    const suggestionPatterns = [
+      /suggestion[s]?[:\-]\s*([^\n]+)/gi,
+      /improve[ment]*[:\-]\s*([^\n]+)/gi,
+      /consider[:\-]\s*([^\n]+)/gi,
+      /recommend[ation]*[:\-]\s*([^\n]+)/gi,
+    ];
+    
+    suggestionPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        suggestions.push({
+          type: 'improvement',
+          description: match[1].trim(),
+        });
+      }
+    });
+    
+    return suggestions;
   }
 
   /**

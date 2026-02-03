@@ -125,6 +125,40 @@ export class UIController extends EventEmitter {
       }
     });
 
+    // Manual code input button
+    const manualButton = document.createElement('button');
+    manualButton.id = 'manual-button';
+    manualButton.textContent = '📝 Manual Input';
+    manualButton.style.cssText = `
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 25px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+      transition: all 0.3s ease;
+      min-width: 140px;
+    `;
+
+    manualButton.addEventListener('mouseenter', () => {
+      manualButton.style.background = '#218838';
+      manualButton.style.transform = 'translateY(-2px)';
+      manualButton.style.boxShadow = '0 6px 16px rgba(40, 167, 69, 0.4)';
+    });
+
+    manualButton.addEventListener('mouseleave', () => {
+      manualButton.style.background = '#28a745';
+      manualButton.style.transform = 'translateY(0)';
+      manualButton.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.3)';
+    });
+
+    manualButton.addEventListener('click', () => {
+      this.showManualCodeInput();
+    });
+
     // Settings button
     const settingsButton = document.createElement('button');
     settingsButton.id = 'settings-button';
@@ -151,6 +185,7 @@ export class UIController extends EventEmitter {
     });
 
     controlPanel.appendChild(scanButton);
+    controlPanel.appendChild(manualButton);
     controlPanel.appendChild(settingsButton);
     this.uiContainer.appendChild(controlPanel);
   }
@@ -533,6 +568,131 @@ export class UIController extends EventEmitter {
       default:
         return '#2196F3';
     }
+  }
+
+  /**
+   * Show manual code input modal
+   */
+  showManualCodeInput(): void {
+    // Create modal overlay
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'manual-input-modal';
+    modalOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      pointer-events: auto;
+    `;
+
+    // Create modal content
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+
+    modalContent.innerHTML = `
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 24px;">Manual Code Input</h2>
+      <p style="margin: 0 0 20px 0; color: #666; line-height: 1.5;">
+        Paste your code below for AI analysis with Gemini. This is perfect when camera quality is poor or you want to analyze code from your clipboard.
+      </p>
+      <textarea 
+        id="manual-code-input" 
+        placeholder="Paste your code here..."
+        style="
+          width: 100%;
+          height: 200px;
+          padding: 15px;
+          border: 2px solid #ddd;
+          border-radius: 8px;
+          font-family: 'Courier New', monospace;
+          font-size: 14px;
+          resize: vertical;
+          box-sizing: border-box;
+        "
+      ></textarea>
+      <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
+        <button 
+          id="cancel-manual-input"
+          style="
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+          "
+        >Cancel</button>
+        <button 
+          id="analyze-manual-input"
+          style="
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+          "
+        >Analyze Code</button>
+      </div>
+    `;
+
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    // Focus on textarea
+    const textarea = document.getElementById('manual-code-input') as HTMLTextAreaElement;
+    setTimeout(() => textarea.focus(), 100);
+
+    // Handle cancel
+    const cancelButton = document.getElementById('cancel-manual-input');
+    cancelButton?.addEventListener('click', () => {
+      modalOverlay.remove();
+    });
+
+    // Handle analyze
+    const analyzeButton = document.getElementById('analyze-manual-input');
+    analyzeButton?.addEventListener('click', () => {
+      const code = textarea.value.trim();
+      if (code) {
+        this.emit('manual-code-analysis', code);
+        modalOverlay.remove();
+        this.showNotification('Analyzing code with Gemini AI...', 'info');
+      } else {
+        this.showNotification('Please enter some code to analyze', 'warning');
+      }
+    });
+
+    // Handle click outside modal
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        modalOverlay.remove();
+      }
+    });
+
+    // Handle escape key
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        modalOverlay.remove();
+        document.removeEventListener('keydown', handleEscape);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
   }
 
   /**

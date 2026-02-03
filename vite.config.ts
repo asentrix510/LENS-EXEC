@@ -8,10 +8,11 @@ export default defineConfig({
     },
   },
   server: {
-    // Use HTTPS for full functionality, HTTP for basic testing
-    https: process.env.VITE_USE_HTTP ? false : {},
-    port: 3000,
-    host: true,
+    // Always use HTTP - no HTTPS
+    https: false,
+    port: 5173, // Use Vite's default port
+    host: '0.0.0.0', // Bind to all network interfaces
+    strictPort: false, // Allow port switching if needed
   },
   build: {
     target: 'es2020',

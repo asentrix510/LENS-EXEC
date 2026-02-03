@@ -171,6 +171,186 @@ export class ARSystem extends EventEmitter {
   }
 
   /**
+   * Analyze manually input code
+   */
+  async analyzeManualCode(code: string): Promise<void> {
+    try {
+      this.logger.info('Analyzing manual code input...');
+      
+      // Validate API key first
+      if (!this.llmIntegration || !this.config.llm.apiKey) {
+        this.uiController.showNotification('Gemini API key not configured. Please check your settings.', 'error');
+        return;
+      }
+      
+      // Create a mock code region for the manual input
+      const mockRegion = {
+        id: `manual_${Date.now()}`,
+        bounds: { x: 0, y: 0, width: 100, height: 100 },
+        confidence: 1.0,
+        text: code,
+        timestamp: Date.now(),
+      };
+
+      // Show analysis progress
+      this.uiController.showAnalysisProgress(true);
+      this.uiController.showNotification('Sending code to Gemini AI for analysis...', 'info');
+
+      try {
+        // Analyze with LLM
+        const analysisResult = await this.llmIntegration.analyzeCode(code, mockRegion);
+        
+        // Display results in a modal or overlay
+        this.displayManualAnalysisResult(analysisResult);
+        
+        this.uiController.showNotification('Analysis completed successfully!', 'success');
+        this.logger.info('Manual code analysis completed');
+        
+      } catch (apiError) {
+        this.logger.error('LLM API error:', apiError);
+        
+        let errorMessage = 'Failed to analyze code with Gemini AI.';
+        if (apiError instanceof Error) {
+          if (apiError.message.includes('401') || apiError.message.includes('403')) {
+            errorMessage = 'Invalid API key. Please check your Gemini API key in settings.';
+          } else if (apiError.message.includes('429')) {
+            errorMessage = 'API quota exceeded. Please try again later.';
+          } else if (apiError.message.includes('400')) {
+            errorMessage = 'Invalid request format. Please try with different code.';
+          } else {
+            errorMessage = `API Error: ${apiError.message}`;
+          }
+        }
+        
+        this.uiController.showNotification(errorMessage, 'error');
+      }
+      
+    } catch (error) {
+      this.logger.error('Error analyzing manual code:', error);
+      this.uiController.showNotification('Unexpected error occurred. Please try again.', 'error');
+    } finally {
+      this.uiController.showAnalysisProgress(false);
+    }
+  }
+
+  /**
+   * Display manual analysis result
+   */
+  private displayManualAnalysisResult(result: any): void {
+    // Create result modal
+    const modalOverlay = document.createElement('div');
+    modalOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      pointer-events: auto;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+
+    let resultHTML = `
+      <h2 style="margin: 0 0 20px 0; color: #333;">🤖 Gemini Analysis Results</h2>
+      <div style="margin-bottom: 20px;">
+        <strong>Language:</strong> ${result.language || 'Unknown'}
+      </div>
+    `;
+
+    // Add errors if any
+    if (result.errors && result.errors.length > 0) {
+      resultHTML += `
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #dc3545; margin: 0 0 10px 0;">🚨 Issues Found</h3>
+          ${result.errors.map((error: any) => `
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+              <strong>${error.type} (${error.severity}):</strong> ${error.description}
+              ${error.suggestedFix ? `<br><em>Fix: ${error.suggestedFix}</em>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Add suggestions if any
+    if (result.suggestions && result.suggestions.length > 0) {
+      resultHTML += `
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #28a745; margin: 0 0 10px 0;">💡 Suggestions</h3>
+          ${result.suggestions.map((suggestion: any) => `
+            <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+              <strong>${suggestion.type}:</strong> ${suggestion.description}
+              ${suggestion.suggestedCode ? `<br><code style="background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">${suggestion.suggestedCode}</code>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Add simulation result if available
+    if (result.simulationResult) {
+      resultHTML += `
+        <div style="margin-bottom: 20px;">
+          <h3 style="color: #007acc; margin: 0 0 10px 0;">⚡ Simulation</h3>
+          <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 10px; border-radius: 6px;">
+            <strong>Output:</strong><br>
+            <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto;">${result.simulationResult.output || 'No output'}</pre>
+          </div>
+        </div>
+      `;
+    }
+
+    resultHTML += `
+      <div style="text-align: right; margin-top: 20px;">
+        <button 
+          id="close-analysis-result"
+          style="
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+          "
+        >Close</button>
+      </div>
+    `;
+
+    modalContent.innerHTML = resultHTML;
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+
+    // Handle close
+    const closeButton = document.getElementById('close-analysis-result');
+    closeButton?.addEventListener('click', () => {
+      modalOverlay.remove();
+    });
+
+    // Handle click outside modal
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        modalOverlay.remove();
+      }
+    });
+  }
+
+  /**
    * Main processing loop for code detection and analysis
    */
   private startProcessingLoop(): void {
@@ -277,6 +457,11 @@ export class ARSystem extends EventEmitter {
     
     this.uiController.on('stop-scanning', () => {
       this.stopScanning().catch(console.error);
+    });
+
+    // Manual code analysis
+    this.uiController.on('manual-code-analysis', (code: string) => {
+      this.analyzeManualCode(code).catch(console.error);
     });
     
     // Configuration events

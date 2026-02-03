@@ -13,13 +13,25 @@ async function main() {
   try {
     logger.info('Starting LENS-EXEC AR Code Analysis System...');
     
-    // Check for required browser features
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Camera access not supported in this browser');
+    // Check for required browser features with mobile browser compatibility
+    const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+    const hasGetUserMedia = (navigator as any).getUserMedia || 
+                           (navigator as any).webkitGetUserMedia || 
+                           (navigator as any).mozGetUserMedia || 
+                           (navigator as any).msGetUserMedia;
+    
+    if (!hasMediaDevices && !hasGetUserMedia) {
+      // For mobile browsers, we'll try to initialize anyway and handle camera errors gracefully
+      logger.warn('Camera API not detected, but continuing for mobile compatibility');
     }
     
-    // Check for HTTPS requirement
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    // Check for HTTPS requirement (allow localhost and local network IPs)
+    const isLocalNetwork = location.hostname === 'localhost' || 
+                          location.hostname.startsWith('192.168.') || 
+                          location.hostname.startsWith('10.') || 
+                          location.hostname.startsWith('172.');
+    
+    if (location.protocol !== 'https:' && !isLocalNetwork) {
       throw new Error('HTTPS is required for camera access and WebXR features');
     }
     
